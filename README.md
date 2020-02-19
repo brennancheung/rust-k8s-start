@@ -14,7 +14,7 @@ This repo serves as an example of how to create a Kubernetes controller in Rust.
 
 - Knowledge of async libraries like `futures` and `tokio` will go a long ways but is not required.
 
-- For the specific demo CRD we will be deploying it is assumed you have Ambassador already working
+- For the specific demo CRD we will be deploying, it is assumed you have Ambassador already working
 and have TLS wildcard set up for the hosts you want to use.
 
 ## Libraries used
@@ -22,6 +22,7 @@ and have TLS wildcard set up for the hosts you want to use.
 - [`serde`](https://serde.rs/) is used for object / JSON (de)serialization.
 - [`kube`](https://github.com/clux/kube-rs) is the Kubernetes client library.
 - [`futures`](https://docs.rs/futures/0.3.4/futures/) is the async library 
+- [`tokio`](https://tokio.rs/) is the async `executor` runtime used by some of the dependencies so we will stick with it.
 
 ## Controller Overview
 
@@ -30,6 +31,9 @@ and have TLS wildcard set up for the hosts you want to use.
 Source: https://github.com/kubernetes/sample-controller/blob/master/docs/controller-client-go.md
 
 We will mostly be concerned with writing an `Informer` that watches a custom CRD and responds to `create`, `delete`, `modified`, and `error` change events.
+
+We will be modifying other Kubernetes objects in our demo controller but what happens here is
+entirely based on what you want your controller to do.  You may want to make API calls, modify a database, or include other library crates to help you effect your changes.
 
 # Steps to create your own controller
 
@@ -103,11 +107,126 @@ These will show up in the `spec` section of our CRD.
 
 ## Define a (de)serializer
 
+Next up let's create a `struct` to represent our CRD.  We will use [serde](https://serde.rs/) as the serialization library
+to encode native `struct` objects to and from the actual API calls.
+
+We just need to describe the `spec` section and we can use `serde`'s `derive` macros to automatically build the serializer
+and deserializer.  The options it supports is quite sophisticated but we will stick with a simple example of just 2 strings for our use case.
+
+```rust
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PreviewEnvironment {
+    pub image: String,
+    pub fqdn: String,
+}
+```
+
+Kubernetes objects typically include `metadata`, `spec`, and `status` sections.  This
+is so common that the Rust `kube` crate provides a generic type helper
+`Object<Spec, Status>`.  Replace `Spec` and `Status` with your custom `struct`s.
+
+```rust
+type KubePreviewEnvironment = Object<PreviewEnvironment, Void>;
+```
+
+If you are not interested in the `status` section you can just use `Void`.
+
+**Note** `Void` is a custom type provided by the `kube` crate, not the
+typical `void` keyword you might be used to from other languages.
+
+
+## Grab the kubeconfig and create an API client
+
+There isn't much to this step.  We only need 2 lines to do this:
+
+```rust
+let kubeconfig = config::load_kube_config().await?;
+let client = APIClient::new(kubeconfig);
+```
+
+If you are working locally, `load_kube_config` will use your current `kubeconfig`
+the same as `kubectl` is currently using.  If you are deploying the service it will use
+the mounted volume containing your in-cluster credentials from your `service account`.
+
+
 ## Describe the resource you want to watch
+
+Next we need to define the resource we want to watch.  3 pieces of information are needed:
+
+- The resource name from the CRD (plural form).
+- The API group to use.
+- The namespace to scope it.
+
+The code to create the resource is simple once you have that information:
+
+```rust
+let resource = RawApi::customResource("previewenvironments")
+    .group("platform9.com")
+    .within("default");
+```
+
+This does not actually perform any I/O yet, it is merely defining the resource.
+
 
 ## Create an Informer
 
+To actually watch for change events to our CRD we use what is called an `Informer`.
+This is a term commonly used when describing Kubernetes controllers.  It basically
+watches for changes and *informs* you whenever it does.
+
+It just needs the `resource` and the existing Kubernetes `client` we defined above.
+
+```rust
+let informer = Informer::raw(client, resource).init().await?;
+```
+
+
 ## Respond to Events
+
+This part could admittedly be a little cleaner and as of the time of this writing
+the Rust async ecosystem is in a state of flux so this part may change in the future.
+
+We need to create a watch loop to receive the change events and dispatch them
+to our event handler function.
+
+```rust
+loop {
+    let mut previews_stream = informer.poll().await?.boxed();
+    while let Some(event) = previews_stream.next().await {
+        handle(event?);
+    }
+}
+```
+
+The `informer` outputs a `stream` we can use.  Streams are not iterable by default
+but when we `use futures::preleude::*` `streams` get extended with the `Iterator`
+trait so we can just use the common `next` to pull out the event.
+
+
+## Implement an event handler
+
+The event handler gets passed an event of type `WatchEvent<T>`.  Where `T` is the
+type for the Kubernetes CRD object.  In our case it is the `KubePreviewEnvironment`
+type we previously defined.
+
+The `handle` function will receive a `WatchEvent` enum consisting of `Added`,
+`Deleted`, `Modified`, and `Error`.  If you don't handle all of them the compiler will complain and throw an error.
+
+The first 3 get passed the actual object.  The `WatchEvent::Error` does not and
+instead contain an error.
+
+Here is a trivial implementation for a handler function:
+
+```rust
+fn handle(event: WatchEvent<KubePreviewEnvironment>) {
+    match event {
+        WatchEvent::Added(pe) => println!("Add PreviewEnvironment name: {}", pe.metadata.name),
+        WatchEvent::Deleted(pe) => println!("Deleted PreviewEnvironment name: {}", pe.metadata.name),
+        WatchEvent::Modified(pe) => println!("Modified PreviewEnvironment name: {}", pe.metadata.name),
+        WatchEvent::Error(err) => println!("{:?}", err),
+    }
+}
+```
 
 
 # Cookbook recipes
