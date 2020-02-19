@@ -52,7 +52,7 @@ It would be nice if creating, modifying, and tearing down a preview environment 
 
 Our CRD will be a new Kubernetes Object with 2 relevant fields.
 
-- `image` will be the container image we want to deply as a K8s deployment.
+- `image` will be the container image we want to deploy as a K8s deployment.
 - `fqdn` will be where we want the service to reside.
 
 For the sake of simplicty we will be using Ambassador `Mappings` and assume you already have
@@ -111,7 +111,10 @@ Next up let's create a `struct` to represent our CRD.  We will use [serde](https
 to encode native `struct` objects to and from the actual API calls.
 
 We just need to describe the `spec` section and we can use `serde`'s `derive` macros to automatically build the serializer
-and deserializer.  The options it supports is quite sophisticated but we will stick with a simple example of just 2 strings for our use case.
+and deserializer.  We will also add `Debug` (for printing) and `Clone` capability for convenience.
+
+`serde` supports more sophisticated types like compound types, optional fields, and arrays, but we will stick with a
+simple example of just 2 strings for our use case.  You can consult the [serde docs](https://serde.rs/) for more information.
 
 ```rust
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -131,8 +134,8 @@ type KubePreviewEnvironment = Object<PreviewEnvironment, Void>;
 
 If you are not interested in the `status` section you can just use `Void`.
 
-**Note** `Void` is a custom type provided by the `kube` crate, not the
-typical `void` keyword you might be used to from other languages.
+**Note:** `Void` is a custom type provided by the `kube` crate, not the
+typical `void` keyword you might be familiar with from other languages.
 
 
 ## Grab the kubeconfig and create an API client
@@ -145,17 +148,18 @@ let client = APIClient::new(kubeconfig);
 ```
 
 If you are working locally, `load_kube_config` will use your current `kubeconfig`
-the same as `kubectl` is currently using.  If you are deploying the service it will use
-the mounted volume containing your in-cluster credentials from your `service account`.
+the same as `kubectl` is currently using.  If you are deploying the service in a pod,
+it will use the mounted volume containing your in-cluster credentials from your
+`service account`.
 
 
 ## Describe the resource you want to watch
 
 Next we need to define the resource we want to watch.  3 pieces of information are needed:
 
-- The resource name from the CRD (plural form).
-- The API group to use.
-- The namespace to scope it.
+1) The resource name from the CRD (plural form).
+2) The API group to use.
+3) The namespace to scope it.
 
 The code to create the resource is simple once you have that information:
 
@@ -198,9 +202,11 @@ loop {
 }
 ```
 
-The `informer` outputs a `stream` we can use.  Streams are not iterable by default
-but when we `use futures::preleude::*` `streams` get extended with the `Iterator`
-trait so we can just use the common `next` to pull out the event.
+The `informer` outputs a `stream` we can use.
+
+Streams are not iterable by default but when we `use futures::prelude::*`, we extend
+our code and can use the `Iterator` trait.  From there we can just call `next` to
+pull out the event.
 
 
 ## Implement an event handler
