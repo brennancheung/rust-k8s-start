@@ -273,6 +273,10 @@ Deleted PreviewEnvironment name: test-preview-environment
 
 Hooray, it works!
 
+[Here's a link](examples/simple.rs) to view the entire code in context so far.
+
+Just under 40 LOC!  That's amazing!
+
 
 # Next steps
 
