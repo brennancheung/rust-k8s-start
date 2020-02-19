@@ -1,0 +1,7 @@
+apiVersion: platform9.com/v1
+kind: PreviewEnvironment
+metadata:
+  name: test-preview-environment
+spec:
+  image: my-container-image:latest
+  fqdn: preview-1.fqdn.com

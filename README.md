@@ -235,6 +235,55 @@ fn handle(event: WatchEvent<KubePreviewEnvironment>) {
 ```
 
 
+# Using the controller
+
+Let's start up and run the controller:
+
+`cargo run`
+
+After it is done compiling it will be waiting and watching for changes.
+
+Let's create a test `PreviewEnvironment` CRD to add.
+
+```yaml
+apiVersion: platform9.com/v1
+kind: PreviewEnvironment
+metadata:
+  name: test-preview-environment
+spec:
+  image: my-container-image:latest
+  fqdn: preview-1.fqdn.com
+
+```
+
+When we run
+
+`kubectl apply -f test-preview-environment.yaml`
+
+and
+
+`kubectl delete -f test-preview-environment.yaml`
+
+We should see:
+
+```
+Add PreviewEnvironment name: test-preview-environment
+Deleted PreviewEnvironment name: test-preview-environment
+```
+
+Hooray, it works!
+
+
+# Next steps
+
+If you have something specific in mind for your controller feel free to look
+through the cookbook recipes below. 
+
+If not, let's move onto [Interact with other K8s resources](docs/interact-k8s.md)
+from the recipes and see how we can manipulate existing Kubernetes objects from
+our controller.
+
+
 # Cookbook recipes
 
 TODO: Add more code samples on how to do various common tasks such as:
