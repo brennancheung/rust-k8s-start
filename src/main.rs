@@ -187,7 +187,7 @@ async fn handle(resources: &ApiResources, event: WatchEvent<KubePreviewEnvironme
             let test_service = json_for_service(service_name.as_str());
             create_service(&resources.services, &test_service).await;
 
-            // Create a service
+            // Create a mapping
             let test_mapping = json_for_mapping(mapping_name.as_str(), host.as_str(), service_name.as_str());
             create_mapping(&resources, &test_mapping).await;
         }
