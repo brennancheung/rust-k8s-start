@@ -133,6 +133,9 @@ fn json_for_mapping(name: &str, host: &str, service: &str) -> JsonValue {
         "kind": "Mapping",
         "metadata": {
             "name": name,
+            "labels": {
+                "preview": "true",
+            }
         },
         "spec": {
             "host": host,
@@ -157,9 +160,13 @@ async fn create_service(services: &Api<Service>, service_json: &JsonValue) {
 async fn create_mapping(resources: &ApiResources, mapping_json: &JsonValue) {
     let pp = PostParams::default();
     let data = serde_json::to_vec(&mapping_json).expect("Failed to serialize Mapping json");
-    println!("before");
     let request = resources.mappings.create(&pp, data).expect("Failed to create mapping");
-    resources.client.request::<Service>(request).await.unwrap();
+    resources.client.request::<Void>(request).await.unwrap();
+}
+
+async fn delete_mapping(resources: &ApiResources, name: &str) {
+    let request = resources.mappings.delete(name, &DeleteParams::default()).unwrap();
+    resources.client.request::<Void>(request).await.unwrap();
 }
 
 async fn handle(resources: &ApiResources, event: WatchEvent<KubePreviewEnvironment>) {
@@ -182,15 +189,13 @@ async fn handle(resources: &ApiResources, event: WatchEvent<KubePreviewEnvironme
 
             // Create a service
             let test_mapping = json_for_mapping(mapping_name.as_str(), host.as_str(), service_name.as_str());
-            println!("About to create mapping {:?}", test_mapping);
-            println!("Mappings resource {:?}", &resources.mappings);
             create_mapping(&resources, &test_mapping).await;
         }
         WatchEvent::Deleted(pe) => {
             println!("Deleted PreviewEnvironment name: {}", pe.metadata.name);
             resources.services.delete(format!("{}-service", pe.metadata.name).as_str(), &DeleteParams::default()).await.unwrap();
             resources.deployments.delete(format!("{}-deployment", pe.metadata.name).as_str(), &DeleteParams::default()).await.unwrap();
-            resources.mappings.delete("test-mapping", &DeleteParams::default()).unwrap();
+            delete_mapping(&resources, "test-mapping").await;
         },
 
         WatchEvent::Modified(pe) => println!("Modified PreviewEnvironment name: {}", pe.metadata.name),
