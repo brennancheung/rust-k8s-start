@@ -293,7 +293,7 @@ our controller.
 TODO: Add more code samples on how to do various common tasks such as:
 
 * Create a Helm Chart to deploy the service
-* Interact with other K8s resource
+* [Interact with other K8s resource](docs/interact-k8s.md)
 * Make API calls
 * Connect to an external database
 * Kick off a K8s job for an external process (build, deploy, etc)
